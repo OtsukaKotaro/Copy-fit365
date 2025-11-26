@@ -1,28 +1,78 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 type NavItem = {
   label: string;
   href: string;
 };
 
+type SheetControls = {
+  openCalendar: () => void;
+  closeCalendar: () => void;
+  calendarOpen: boolean;
+};
+
+const SheetContext = createContext<SheetControls | null>(null);
+
+export function useSheetControls() {
+  const ctx = useContext(SheetContext);
+  if (!ctx) {
+    throw new Error("useSheetControls must be used inside AppShell");
+  }
+  return ctx;
+}
+
 const navItems: NavItem[] = [
-  { label: "お気に入り店舗", href: "/stores" },
-  { label: "コンディション", href: "/condition" },
-  { label: "トレーニング", href: "/training" },
-  { label: "ホーム", href: "/" },
+  { label: "お知らせ", href: "/news" },
+  { label: "ベアレージポイント", href: "/points" },
+  { label: "友達紹介", href: "/referral" },
+  { label: "デジタルチケット", href: "/tickets" },
+  { label: "トレーニング動画", href: "/training-videos" },
+  { label: "レズミルズ動画", href: "/lesmills" },
+  { label: "来館の記録", href: "/visits" },
+  { label: "FIT365施設利用方法", href: "/guide" },
+  { label: "契約情報", href: "/contract" },
+  { label: "各種お手続き", href: "/procedures" },
+  { label: "お支払い情報", href: "/billing" },
+  { label: "オンラインショップ", href: "/shop" },
+  { label: "アプリ設定", href: "/settings" },
+  { label: "minefitのご紹介", href: "/minefit" },
+  { label: "お問い合わせ", href: "/contact" },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
+  const slideRoutes = new Set([
+    "/news",
+    "/points",
+    "/referral",
+    "/training-videos",
+    "/lesmills",
+    "/visits",
+    "/guide",
+    "/contract",
+    "/procedures",
+    "/billing",
+    "/settings",
+    "/contact",
+  ]);
+  const isSlidePage = pathname ? slideRoutes.has(pathname) : false;
 
   const safeToUseCamera =
     typeof navigator !== "undefined" && !!navigator.mediaDevices;
@@ -78,44 +128,84 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setCameraOpen(true);
   };
 
+  useEffect(() => {
+    if (drawerOpen || cameraOpen || calendarOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [drawerOpen, cameraOpen, calendarOpen]);
+
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#f7f2f5] text-[#3b2f32]">
-      <SideDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-
-      <Header
-        onMenu={() => setDrawerOpen((prev) => !prev)}
-        onQr={handleOpenCamera}
-        shiftClass={shiftClass}
-      />
-
-      <main
-        className={`relative z-10 min-h-screen pb-32 pt-16 transition-transform duration-300 ease-out ${shiftClass}`}
-      >
-        {children}
-      </main>
-
-      <FooterActions
-        shiftClass={shiftClass}
-        onRecord={() => alert("記録ボタンの動作を設定してください")}
-        onQr={handleOpenCamera}
-      />
-      <FooterNav currentPath={pathname} shiftClass={shiftClass} />
-
-      {drawerOpen ? (
-        <button
-          aria-label="メニューを閉じる"
-          className="fixed inset-0 z-40 bg-black/30 transition-opacity"
-          onClick={() => setDrawerOpen(false)}
+    <SheetContext.Provider
+      value={{
+        openCalendar: () => setCalendarOpen(true),
+        closeCalendar: () => setCalendarOpen(false),
+        calendarOpen,
+      }}
+    >
+      <div className="relative min-h-screen overflow-x-hidden bg-[#f7f2f5] text-[#3b2f32]">
+        <SideDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
         />
-      ) : null}
 
-      <CameraSheet
-        open={cameraOpen}
-        onClose={() => setCameraOpen(false)}
-        videoRef={videoRef}
-        error={cameraError}
-      />
-    </div>
+        <Header
+          onMenu={() => setDrawerOpen((prev) => !prev)}
+          onQr={handleOpenCamera}
+          shiftClass={shiftClass}
+          isSlidePage={isSlidePage}
+          onBack={() => {
+            const canGoBack =
+              typeof window !== "undefined" && window.history.length > 1;
+            if (canGoBack) {
+              router.back();
+            } else {
+              router.push("/");
+            }
+          }}
+        />
+
+        <main
+          className={`relative z-10 min-h-screen pb-32 pt-16 transition-transform duration-300 ease-out ${shiftClass}`}
+        >
+          {children}
+        </main>
+
+        {!isSlidePage ? (
+          <>
+            <FooterActions
+              shiftClass={shiftClass}
+              onRecord={() => alert("記録ボタンの動作を設定してください")}
+              onQr={handleOpenCamera}
+            />
+            <FooterNav
+              currentPath={pathname}
+              shiftClass={shiftClass}
+            />
+          </>
+        ) : null}
+
+        {drawerOpen ? (
+          <button
+            aria-label="メニューを閉じる"
+            className="fixed inset-0 z-40 bg-black/30 transition-opacity"
+            onClick={() => setDrawerOpen(false)}
+          />
+        ) : null}
+
+        <CameraSheet
+          open={cameraOpen}
+          onClose={() => setCameraOpen(false)}
+          videoRef={videoRef}
+          error={cameraError}
+        />
+        <CalendarSheet open={calendarOpen} onClose={() => setCalendarOpen(false)} />
+      </div>
+    </SheetContext.Provider>
   );
 }
 
@@ -160,11 +250,13 @@ function FooterNav({
   currentPath: string | null;
   shiftClass: string;
 }) {
+  const router = useRouter();
+
   const itemsWithIcon = [
-    { ...navItems[3], icon: <HomeIcon /> },
-    { ...navItems[2], icon: <BarbellIcon /> },
-    { ...navItems[1], icon: <LineChartIcon /> },
-    { ...navItems[0], icon: <BuildingIcon /> },
+    { label: "ホーム", href: "/", icon: <HomeIcon /> },
+    { label: "トレーニング", href: "/training", icon: <BarbellIcon /> },
+    { label: "コンディション", href: "/condition", icon: <LineChartIcon /> },
+    { label: "お気に入り店舗", href: "/stores", icon: <BuildingIcon /> },
   ];
 
   return (
@@ -175,13 +267,14 @@ function FooterNav({
         {itemsWithIcon.map((item) => {
           const active = currentPath === item.href;
           return (
-            <Link
+            <button
               key={item.label}
-              href={item.href}
+              type="button"
               className={`flex flex-col items-center justify-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold transition ${
                 active ? "text-[#f8c1d3]" : "text-white/80 hover:text-white"
               }`}
               aria-current={active ? "page" : undefined}
+              onClick={() => router.push(item.href)}
             >
               <span
                 className={`text-lg leading-none ${
@@ -191,7 +284,7 @@ function FooterNav({
                 {item.icon}
               </span>
               <span className="leading-none">{item.label}</span>
-            </Link>
+            </button>
           );
         })}
       </div>
@@ -204,22 +297,36 @@ function Header({
   onMenu,
   onQr,
   shiftClass,
+  isSlidePage,
+  onBack,
 }: {
   onMenu: () => void;
   onQr: () => void;
   shiftClass: string;
+  isSlidePage: boolean;
+  onBack: () => void;
 }) {
   return (
     <header
       className={`fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-slate-200 bg-white px-4 text-[#3b2f32] shadow-sm transition-transform duration-300 ease-out ${shiftClass}`}
     >
-      <button
-        onClick={onMenu}
-        aria-label="メニューを開く"
-        className="flex items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-white/60"
-      >
-        <HamburgerIcon />
-      </button>
+      {isSlidePage ? (
+        <button
+          onClick={onBack}
+          aria-label="戻る"
+          className="ml-0 flex items-center gap-1 rounded-lg px-1 py-1 transition-colors hover:bg-white/60"
+        >
+          <BackIcon />
+        </button>
+      ) : (
+        <button
+          onClick={onMenu}
+          aria-label="メニューを開く"
+          className="flex items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-white/60"
+        >
+          <HamburgerIcon />
+        </button>
+      )}
       <div className="flex items-center gap-3 text-sm font-semibold">
         <span className="text-[#f06488]">FIT365</span>
       </div>
@@ -241,33 +348,30 @@ function SideDrawer({
   open: boolean;
   onClose: () => void;
 }) {
+  const router = useRouter();
+
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 w-72 bg-white px-5 pt-5 shadow-xl transition-transform duration-300 ease-out ${
+      className={`fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto bg-white px-5 pt-5 shadow-xl transition-transform duration-300 ease-out ${
         open ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="mb-6 flex items-center justify-between">
-        <div className="text-lg font-semibold text-slate-800">ナビゲーション</div>
-        <button
-          onClick={onClose}
-          aria-label="閉じる"
-          className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100"
-        >
-          <CloseIcon />
-        </button>
-      </div>
-      <nav className="space-y-1">
-        {navItems.map((item) => (
-          <Link
+      <nav className="space-y-0">
+        {navItems.map((item, index) => (
+          <button
             key={item.label}
-            href={item.href}
-            className="group flex items-center justify-between rounded-lg px-3 py-3 text-sm font-medium text-slate-800 transition hover:bg-slate-100"
-            onClick={onClose}
+            type="button"
+            className={`group flex w-full items-center justify-between px-3 py-3 text-left text-sm font-medium text-slate-800 transition ${
+              index % 2 === 0 ? "bg-slate-100" : "bg-white"
+            }`}
+            onClick={() => {
+              router.push(item.href);
+              onClose();
+            }}
           >
             <span>{item.label}</span>
             <span className="text-xs text-slate-400">›</span>
-          </Link>
+          </button>
         ))}
       </nav>
     </aside>
@@ -287,7 +391,7 @@ function CameraSheet({
 }) {
   return (
     <div
-      className={`fixed inset-x-0 bottom-0 top-14 z-[80] ${
+      className={`fixed inset-0 z-[80] ${
         open ? "pointer-events-auto" : "pointer-events-none"
       }`}
     >
@@ -299,24 +403,24 @@ function CameraSheet({
       />
       <div
         className={`absolute inset-x-0 bottom-0 transform transition-transform duration-300 ease-out ${
-          open ? "translate-y-0" : "translate-y-full"
+          open ? "translate-y-0" : "translate-y-[calc(100%+3.5rem)]"
         }`}
+        style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
       >
-        <div className="absolute -top-12 left-4">
+        <div className="absolute left-4 -top-12 z-10">
           <button
             onClick={onClose}
-            aria-label="??????????"
-            className="rounded-full bg-white p-3 text-slate-700 shadow-md transition hover:-translate-y-0.5 hover:bg-slate-50"
+            aria-label="閉じる"
+            className="rounded-full bg-white p-3 text-black shadow-md transition hover:-translate-y-0.5 hover:bg-slate-50"
           >
             <CloseIcon />
           </button>
         </div>
-        <div className="mx-auto max-w-xl rounded-t-2xl bg-white shadow-2xl ring-1 ring-slate-100">
-          <div className="flex items-center justify-between px-4 pt-4">
+        <div className="relative mx-auto max-w-xl max-h-full overflow-y-auto rounded-t-2xl bg-white shadow-2xl ring-1 ring-slate-100">
+          <div className="sticky top-0 flex items-center bg-white px-4 pt-4 pb-2">
             <div className="text-base font-semibold text-slate-800">
-              QR????????
+              QRコードを読み取る
             </div>
-            <span className="text-xs text-slate-400">????HTTPS?????</span>
           </div>
           <div className="p-4">
             <div className="relative overflow-hidden rounded-xl border border-dashed border-slate-200 bg-slate-50">
@@ -338,8 +442,112 @@ function CameraSheet({
               )}
             </div>
             <p className="mt-3 text-xs text-slate-500">
-              ??????????????????????????????
+              画面内の枠にコードが入るようにかざしてください。
             </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const today = new Date();
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const monthLabel = `${year}/${month + 1}`;
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: Array<number | null> = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) {
+    cells.push(null);
+  }
+  const weekdayLabels = ["日", "月", "火", "水", "木", "金", "土"];
+
+  const goPrevMonth = () =>
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  const goNextMonth = () =>
+    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+
+  return (
+    <div
+      className={`fixed inset-0 z-[80] ${
+        open ? "pointer-events-auto" : "pointer-events-none"
+      }`}
+    >
+      <div
+        aria-hidden="true"
+        className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ${
+          open ? "opacity-100" : "opacity-0"
+        }`}
+      />
+      <div
+        className={`absolute inset-x-0 bottom-0 transform transition-transform duration-300 ease-out ${
+          open ? "translate-y-0" : "translate-y-[calc(100%+3.5rem)]"
+        }`}
+        style={{ maxHeight: "calc(100dvh - 3.5rem)" }}
+      >
+        <div className="absolute left-4 -top-12 z-10">
+          <button
+            onClick={onClose}
+            aria-label="閉じる"
+            className="rounded-full bg-white p-3 text-black shadow-md transition hover:-translate-y-0.5 hover:bg-slate-50"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+        <div className="relative mx-auto max-w-xl max-h-full overflow-y-auto rounded-t-2xl bg-white shadow-2xl ring-1 ring-slate-100">
+          <div className="sticky top-0 flex items-center justify-between bg-white px-4 pt-4 pb-2">
+            <button
+              type="button"
+              aria-label="前の月へ"
+              onClick={goPrevMonth}
+              className="rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#3b2f32] shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:bg-slate-50"
+            >
+              ＜
+            </button>
+            <div className="text-base font-semibold text-slate-800">{monthLabel}</div>
+            <button
+              type="button"
+              aria-label="次の月へ"
+              onClick={goNextMonth}
+              className="rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#3b2f32] shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:bg-slate-50"
+            >
+              ＞
+            </button>
+          </div>
+          <div className="px-4 pb-4">
+            <div className="mb-2 grid grid-cols-7 text-center text-xs font-semibold text-slate-500">
+              {weekdayLabels.map((day) => (
+                <div key={day}>{day}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-2 text-center text-sm">
+              {cells.map((day, idx) => {
+                const isToday =
+                  day &&
+                  day === today.getDate() &&
+                  month === today.getMonth() &&
+                  year === today.getFullYear();
+                return (
+                  <div
+                    key={day ? `${year}-${month + 1}-${day}` : `empty-${idx}`}
+                    className={`flex aspect-square items-center justify-center rounded-lg border border-slate-100 ${
+                      day && isToday
+                        ? "bg-[#f9e3eb] font-semibold text-[#f06488] shadow-inner"
+                        : "bg-white text-slate-700"
+                    }`}
+                  >
+                    {day ?? ""}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
@@ -360,7 +568,7 @@ function HamburgerIcon() {
       strokeLinejoin="round"
     >
       <line x1="4" x2="20" y1="6" y2="6" />
-      <line x1="4" x2="16" y1="12" y2="12" />
+      <line x1="4" x2="20" y1="12" y2="12" />
       <line x1="4" x2="20" y1="18" y2="18" />
     </svg>
   );
@@ -503,6 +711,23 @@ function CloseIcon() {
     >
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg
+      width="12"
+      height="20"
+      viewBox="0 0 12 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M9 3 3 10l6 7" />
     </svg>
   );
 }
