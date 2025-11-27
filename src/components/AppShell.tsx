@@ -53,6 +53,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [infoSheet, setInfoSheet] = useState<{ title: string; message: string } | null>(null);
+  const [infoSheetOpen, setInfoSheetOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -72,7 +74,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     "/settings",
     "/contact",
   ]);
-  const isSlidePage = pathname ? slideRoutes.has(pathname) : false;
+  const isSlidePage = (pathname ? slideRoutes.has(pathname) : false) || infoSheetOpen;
 
   const safeToUseCamera =
     typeof navigator !== "undefined" && !!navigator.mediaDevices;
@@ -117,6 +119,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [cameraOpen, safeToUseCamera, stopStream]);
 
   const shiftClass = drawerOpen ? "translate-x-72" : "translate-x-0";
+  const overlayOpen = drawerOpen || cameraOpen || calendarOpen || infoSheetOpen;
 
   const handleOpenCamera = () => {
     if (!safeToUseCamera) {
@@ -129,7 +132,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    if (drawerOpen || cameraOpen || calendarOpen) {
+    if (overlayOpen) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -137,7 +140,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [drawerOpen, cameraOpen, calendarOpen]);
+  }, [overlayOpen]);
 
   return (
     <SheetContext.Provider
@@ -151,6 +154,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <SideDrawer
           open={drawerOpen}
           onClose={() => setDrawerOpen(false)}
+          onSelect={(item) => {
+            setInfoSheet({ title: item.label, message: `${item.label}ページ` });
+            setInfoSheetOpen(true);
+          }}
         />
 
         <Header
@@ -159,6 +166,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           shiftClass={shiftClass}
           isSlidePage={isSlidePage}
           onBack={() => {
+            if (infoSheetOpen) {
+              setInfoSheetOpen(false);
+              setTimeout(() => setInfoSheet(null), 280);
+              return;
+            }
             const canGoBack =
               typeof window !== "undefined" && window.history.length > 1;
             if (canGoBack) {
@@ -204,6 +216,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           error={cameraError}
         />
         <CalendarSheet open={calendarOpen} onClose={() => setCalendarOpen(false)} />
+        {infoSheet ? (
+          <InfoSheet
+            open={infoSheetOpen}
+            title={infoSheet.title}
+            message={infoSheet.message}
+            onClose={() => {
+              setInfoSheetOpen(false);
+              setTimeout(() => setInfoSheet(null), 280);
+            }}
+          />
+        ) : null}
       </div>
     </SheetContext.Provider>
   );
@@ -344,12 +367,12 @@ function Header({
 function SideDrawer({
   open,
   onClose,
+  onSelect,
 }: {
   open: boolean;
   onClose: () => void;
+  onSelect: (item: NavItem) => void;
 }) {
-  const router = useRouter();
-
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-50 w-72 overflow-y-auto bg-white px-5 pt-5 shadow-xl transition-transform duration-300 ease-out ${
@@ -365,7 +388,7 @@ function SideDrawer({
               index % 2 === 0 ? "bg-slate-100" : "bg-white"
             }`}
             onClick={() => {
-              router.push(item.href);
+              onSelect(item);
               onClose();
             }}
           >
@@ -547,6 +570,71 @@ function CalendarSheet({ open, onClose }: { open: boolean; onClose: () => void }
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoSheet({
+  open,
+  title,
+  message,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  message: string;
+  onClose: () => void;
+}) {
+  const [headerVisible, setHeaderVisible] = useState(false);
+  const [bodyVisible, setBodyVisible] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      const h = setTimeout(() => setHeaderVisible(true), 40);
+      const b = setTimeout(() => setBodyVisible(true), 140);
+      return () => {
+        clearTimeout(h);
+        clearTimeout(b);
+      };
+    } else {
+      setHeaderVisible(false);
+      setBodyVisible(false);
+    }
+  }, [open]);
+
+  return (
+    <div
+      className="fixed inset-0 z-20 pointer-events-none"
+    >
+      <div
+        aria-hidden="true"
+        className={`absolute inset-x-0 top-14 bottom-0 bg-transparent ${
+          open ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+        onClick={onClose}
+      />
+      <div className="absolute inset-x-0 top-14 bottom-0">
+        <div className="relative h-full w-full pointer-events-auto">
+          <div
+            className={`absolute inset-x-0 top-0 z-10 flex justify-center transition-transform duration-300 ease-out ${
+              headerVisible ? "translate-y-0" : "-translate-y-full"
+            }`}
+          >
+            <div className="w-full bg-[#f06488] px-4 py-2 text-center text-base font-bold text-white">
+              {title}
+            </div>
+          </div>
+          <div
+            className={`absolute inset-0 bg-white shadow-2xl ring-1 ring-slate-100 transition-transform duration-300 ease-out ${
+              bodyVisible ? "translate-x-0" : "translate-x-full"
+            }`}
+          >
+            <div className="h-full overflow-y-auto px-4 pb-6 pt-12 text-sm text-[#4f4347]">
+              {message}
             </div>
           </div>
         </div>
