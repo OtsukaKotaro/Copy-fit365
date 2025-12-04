@@ -4,18 +4,12 @@ import { useSheetControls } from "@/components/AppShell";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
-  const { openCalendar } = useSheetControls();
+  const { openCalendar, openSheet } = useSheetControls();
   const router = useRouter();
 
   const cards = [
-    {
-      type: "calendar" as const,
-      highlight: "2025/11/25 TUE",
-    },
-    {
-      title: "同伴利用",
-      description: "同伴利用対応のプランです",
-    },
+    { type: "calendar" as const, highlight: "2025/11/25 TUE" },
+    { title: "同伴利用", description: "同伴利用対応プランで入館できます" },
     {
       title: "ベアレージポイント",
       description: "貯まったポイントを確認",
@@ -23,7 +17,7 @@ export default function Home() {
     },
     {
       title: "お知らせ",
-      description: "本日抽選申込日！FIT365 あんしんサポートに関するご案内",
+      description: "FIT365 あんしんサポートに関するご案内",
     },
     {
       title: "店舗",
@@ -35,7 +29,7 @@ export default function Home() {
     },
     {
       title: "トレーニング",
-      description: "メニューや記録を確認",
+      description: "メニューの記録を確認",
     },
     {
       title: "コンディション",
@@ -43,16 +37,8 @@ export default function Home() {
     },
   ];
 
-  const actionableTitles = new Set([
-    "トレーニング",
-    "コンディション",
-  ]);
-  const hoverOnlyTitles = new Set([
-    "ベアレージポイント",
-    "店舗",
-    "会員情報",
-    "お知らせ",
-  ]);
+  const actionableTitles = new Set(["トレーニング", "コンディション"]);
+  const hoverOnlyTitles = new Set(["ベアレージポイント", "店舗", "会員情報", "お知らせ"]);
   const arrowTitles = new Set([
     "ベアレージポイント",
     "店舗",
@@ -95,12 +81,14 @@ export default function Home() {
           const handleClick =
             card.title === "トレーニング"
               ? () => router.push("/training")
-            : card.title === "コンディション"
-              ? () => router.push("/condition")
+              : card.title === "コンディション"
+                ? () => router.push("/condition")
               : card.title === "店舗"
                 ? () => router.push("/stores")
               : card.title === "お知らせ"
-                ? () => router.push("/news")
+                ? () => openSheet("news", { closable: false })
+              : card.title === "ベアレージポイント"
+                ? () => openSheet("points", { closable: false })
               : card.type === "calendar"
                 ? () => openCalendar()
                 : undefined;
