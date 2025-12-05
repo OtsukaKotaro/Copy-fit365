@@ -7,8 +7,10 @@ export default function Home() {
   const { openCalendar, openSheet } = useSheetControls();
   const router = useRouter();
 
+  const todayLabel = formatTodayLabel();
+
   const cards = [
-    { type: "calendar" as const, highlight: "2025/11/25 TUE" },
+    { type: "calendar" as const, highlight: todayLabel },
     { title: "同伴利用", description: "同伴利用対応プランで入館できます" },
     {
       title: "ベアレージポイント",
@@ -130,6 +132,15 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+function formatTodayLabel() {
+  const now = new Date();
+  const weekday = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][now.getDay()];
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}/${m}/${d} ${weekday}`;
 }
 
 function CalendarIcon() {

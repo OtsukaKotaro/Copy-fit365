@@ -1,3 +1,5 @@
+"use client";
+
 import { useSheetControls } from "@/components/AppShell";
 
 export default function StoresPage() {

@@ -6,6 +6,8 @@ type SheetPageProps = {
   title: string;
   message: string;
   onClose?: () => void;
+  onStartClose?: () => void;
+  onVisibilityChange?: (visible: boolean) => void;
   showClose?: boolean;
   slideFrom?: "bottom" | "right";
   closeSignal?: number;
@@ -18,6 +20,8 @@ export default function SheetPage({
   showClose = true,
   slideFrom = "right",
   closeSignal = 0,
+  onStartClose,
+  onVisibilityChange,
 }: SheetPageProps) {
   const [visible, setVisible] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -37,9 +41,14 @@ export default function SheetPage({
 
   const handleClose = () => {
     if (closing) return;
+    if (onStartClose) onStartClose();
     setClosing(true);
     setVisible(false);
   };
+
+  useEffect(() => {
+    if (onVisibilityChange) onVisibilityChange(visible);
+  }, [visible, onVisibilityChange]);
 
   const finishClose = () => {
     if (onClose) onClose();

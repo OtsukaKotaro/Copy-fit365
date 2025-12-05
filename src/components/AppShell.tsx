@@ -119,6 +119,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [activeSheet, setActiveSheet] = useState<{ key: SheetKey; closable: boolean } | null>(null);
   const [sheetCloseSignal, setSheetCloseSignal] = useState(0);
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [overlayActive, setOverlayActive] = useState(false);
+  const [overlayDimmed, setOverlayDimmed] = useState(false);
   const pathname = usePathname();
 
   const shiftClass = drawerOpen ? "translate-x-72" : "translate-x-0";
@@ -132,6 +135,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const sheetContent = activeSheet ? sheetMap[activeSheet.key] : null;
+  const sheetIsOpen = Boolean(activeSheet && sheetContent);
+  const shouldRenderOverlay = sheetIsOpen || overlayActive || overlayVisible;
+  const currentDimmed = activeSheet ? dimmedSheetKeys.has(activeSheet.key) : overlayDimmed;
+
+  useEffect(() => {
+    if (activeSheet) {
+      setOverlayDimmed(dimmedSheetKeys.has(activeSheet.key));
+      setOverlayActive(true);
+      setOverlayVisible(true);
+    } else {
+      setOverlayVisible(false);
+    }
+  }, [activeSheet]);
+
+  useEffect(() => {
+    if (!sheetIsOpen && !overlayVisible) {
+      setOverlayActive(false);
+      setOverlayDimmed(false);
+    }
+  }, [sheetIsOpen, overlayVisible]);
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -144,7 +167,18 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#f7f2f5] text-[#3b2f32]">
-      {calendarOpen ? <div className="fixed inset-0 z-50 bg-black/40" /> : null}
+      {calendarOpen ? (
+        <button
+          aria-label="カレンダーを閉じる"
+          onClick={() => setCalendarOpen(false)}
+          className="fixed inset-0 z-50 bg-transparent"
+          style={{
+            backgroundColor: "rgba(0,0,0,0.32)",
+            backgroundImage:
+              "repeating-linear-gradient(135deg, rgba(0,0,0,0.28) 0, rgba(0,0,0,0.28) 12px, rgba(0,0,0,0.12) 12px, rgba(0,0,0,0.12) 24px)",
+          }}
+        />
+      ) : null}
 
       <SideDrawer
         open={drawerOpen}
@@ -162,7 +196,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         onOpenQr={() => openSheet("qr")}
         sheetState={activeSheet}
         onCloseSheet={() => {
-          if (activeSheet) setSheetCloseSignal((c) => c + 1);
+          if (activeSheet) {
+            setOverlayVisible(false);
+            setSheetCloseSignal((c) => c + 1);
+          }
         }}
       />
 
@@ -172,18 +209,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </SheetControlsContext.Provider>
 
-      {activeSheet && sheetContent ? (
+      {shouldRenderOverlay ? (
         <SheetOverlay
-          dimmed={dimmedSheetKeys.has(activeSheet.key)}
+          visible={overlayVisible || sheetIsOpen}
+          visible={overlayVisible}
+          dimmed={currentDimmed}
+          onFadeComplete={() => {
+            if (!sheetIsOpen) {
+              setOverlayActive(false);
+              setOverlayDimmed(false);
+            }
+          }}
           content={
-            <SheetPage
-              title={sheetContent.title}
-              message={sheetContent.message}
-              onClose={closeSheet}
-              showClose={activeSheet.closable}
-              closeSignal={sheetCloseSignal}
-              slideFrom={bottomSlideKeys.has(activeSheet.key) ? "bottom" : "right"}
-            />
+            sheetIsOpen && activeSheet ? (
+              <SheetPage
+                title={sheetContent.title}
+                message={sheetContent.message}
+                onClose={closeSheet}
+                onStartClose={() => setOverlayVisible(false)}
+                onVisibilityChange={(next) => {
+                  setOverlayVisible(next);
+                  if (next) setOverlayActive(true);
+                }}
+                showClose={activeSheet.closable}
+                closeSignal={sheetCloseSignal}
+                slideFrom={bottomSlideKeys.has(activeSheet.key) ? "bottom" : "right"}
+              />
+            ) : null
           }
         />
       ) : null}
@@ -218,29 +270,92 @@ function PageActions({
   const recordKey = currentPath ? recordTargets[currentPath] : undefined;
   if (!recordKey) return null;
 
+  const [recordChoiceOpen, setRecordChoiceOpen] = useState(false);
+  const isHome = currentPath === "/";
+
+  const handleRecord = () => {
+    if (isHome) {
+      setRecordChoiceOpen(true);
+      return;
+    }
+    onOpenRecord(recordKey, { closable: true });
+  };
+
+  const openTraining = () => {
+    onOpenRecord("recordTraining", { closable: true });
+    setRecordChoiceOpen(false);
+  };
+
+  const openCondition = () => {
+    onOpenRecord("recordCondition", { closable: true });
+    setRecordChoiceOpen(false);
+  };
+
   return (
-    <div className={`fixed bottom-24 right-4 z-30 flex flex-col gap-2 transition-transform duration-300 ease-out ${shiftClass}`}>
-      <button
-        onClick={() => onOpenRecord(recordKey, { closable: true })}
-        className="flex items-center gap-2 rounded-full bg-[#f06488] px-3 py-2 text-sm font-semibold text-white shadow-md ring-1 ring-[#f06488]/40 transition hover:-translate-y-[1px] hover:shadow-lg"
-      >
-        記録
-      </button>
-      <button
-        onClick={onOpenQr}
-        className="flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-semibold text-[#3b2f32] shadow-md ring-1 ring-[#f1e1e6] transition hover:-translate-y-[1px] hover:shadow-lg"
-      >
-        <span className="text-base">
-          <QrIcon />
-        </span>
-        QR
-      </button>
-    </div>
+    <>
+      <div className={`fixed bottom-24 right-4 z-30 flex flex-row gap-3 transition-transform duration-300 ease-out ${shiftClass}`}>
+        <button
+          onClick={handleRecord}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[#f06488] text-sm font-semibold text-white shadow-md ring-1 ring-[#f06488]/40 transition hover:-translate-y-[1px] hover:shadow-lg"
+        >
+          記録
+        </button>
+        <button
+          onClick={onOpenQr}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-sm font-semibold text-[#3b2f32] shadow-md ring-1 ring-[#f1e1e6] transition hover:-translate-y-[1px] hover:shadow-lg"
+        >
+          <span className="text-lg">
+            <QrIcon />
+          </span>
+        </button>
+      </div>
+
+      {recordChoiceOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/30 px-4 pb-6">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-[#f1e1e6]">
+            <div className="text-base font-semibold text-[#3b2f32]">どちらを記録しますか？</div>
+            <div className="mt-4 flex flex-col gap-3">
+              <button
+                onClick={openTraining}
+                className="w-full rounded-full bg-[#f06488] px-4 py-3 text-sm font-semibold text-white shadow hover:shadow-md transition"
+              >
+                トレーニング
+              </button>
+              <button
+                onClick={openCondition}
+                className="w-full rounded-full bg-white px-4 py-3 text-sm font-semibold text-[#f06488] ring-1 ring-[#f06488] transition hover:-translate-y-[1px]"
+              >
+                コンディション
+              </button>
+              <button
+                onClick={() => setRecordChoiceOpen(false)}
+                className="w-full rounded-full bg-white px-4 py-3 text-sm font-semibold text-[#3b2f32] ring-1 ring-[#e5d8dc] transition hover:bg-slate-50"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
-function SheetOverlay({ content, dimmed }: { content: React.ReactNode; dimmed: boolean }) {
-  if (!content) return null;
+function SheetOverlay({
+  content,
+  dimmed,
+  visible,
+  onFadeComplete,
+}: {
+  content: React.ReactNode;
+  dimmed: boolean;
+  visible: boolean;
+  onFadeComplete?: () => void;
+}) {
+  const handleOverlayTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    if (!visible && onFadeComplete) onFadeComplete();
+  };
 
   const pattern = dimmed
     ? {
@@ -251,7 +366,12 @@ function SheetOverlay({ content, dimmed }: { content: React.ReactNode; dimmed: b
     : undefined;
 
   return (
-    <div className="fixed inset-0 z-[60] pointer-events-none transition-colors duration-200" style={pattern}>
+    <div className="fixed inset-0 z-[60] pointer-events-none">
+      <div
+        className={`absolute inset-0 transition-opacity duration-200 ${visible ? "opacity-100" : "opacity-0"}`}
+        style={pattern}
+        onTransitionEnd={handleOverlayTransitionEnd}
+      />
       <div className="absolute inset-x-0 top-0 bottom-0 pointer-events-none">
         <div className="h-14 w-full" />
         <div className="pointer-events-auto h-[calc(100%-3.5rem)]">{content}</div>
@@ -451,37 +571,49 @@ function CalendarSheet({ open, onClose }: { open: boolean; onClose: () => void }
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null);
   const isProgrammatic = useRef(false);
+  const [programmaticScroll, setProgrammaticScroll] = useState(false);
+
+  const getColumnWidth = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return 1;
+    const width = container.scrollWidth / months.length;
+    return width || 1;
+  }, [months.length]);
 
   useLayoutEffect(() => {
     if (!open) return;
     const container = scrollRef.current;
     if (!container) return;
     isProgrammatic.current = true;
-    const width = container.clientWidth;
+    setProgrammaticScroll(true);
+    const width = getColumnWidth();
     const targetIndex = initialIndex;
     setActiveIndex(targetIndex);
     requestAnimationFrame(() => {
       container.scrollTo({ left: width * targetIndex, behavior: "auto" });
       setTimeout(() => {
         isProgrammatic.current = false;
+        setProgrammaticScroll(false);
       }, 120);
     });
-  }, [open, initialIndex]);
+  }, [open, initialIndex, getColumnWidth]);
 
   const scrollToIndex = useCallback(
     (nextIndex: number) => {
       const container = scrollRef.current;
       if (!container) return;
-      const width = container.clientWidth;
+      const width = getColumnWidth();
       const clamped = Math.max(0, Math.min(months.length - 1, nextIndex));
       setActiveIndex(clamped);
       isProgrammatic.current = true;
+      setProgrammaticScroll(true);
       container.scrollTo({ left: width * clamped, behavior: "smooth" });
       setTimeout(() => {
         isProgrammatic.current = false;
+        setProgrammaticScroll(false);
       }, 350);
     },
-    [months.length],
+    [months.length, getColumnWidth],
   );
 
   const handleNav = (delta: number) => {
@@ -493,7 +625,7 @@ function CalendarSheet({ open, onClose }: { open: boolean; onClose: () => void }
     if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
     const container = e.currentTarget;
     scrollTimeout.current = setTimeout(() => {
-      const width = container.clientWidth || 1;
+      const width = getColumnWidth();
       const raw = container.scrollLeft / width;
       const index = Math.round(raw);
       const clamped = Math.max(0, Math.min(months.length - 1, index));
@@ -539,7 +671,7 @@ function CalendarSheet({ open, onClose }: { open: boolean; onClose: () => void }
         <div className="absolute inset-0 overflow-hidden">
           <div className="relative h-full w-full bg-white shadow-2xl">
             <div className="absolute inset-0 bg-[#f7f2f5]/80" />
-            <div className="relative h-full overflow-hidden">
+            <div className="relative h-full overflow-x-hidden overflow-y-auto">
               <div className="sticky top-0 z-20 flex items-center justify-between bg-[#f06488] px-4 py-3 text-white shadow">
                 <button
                   onClick={() => handleNav(-1)}
@@ -569,7 +701,8 @@ function CalendarSheet({ open, onClose }: { open: boolean; onClose: () => void }
                 <div
                   ref={scrollRef}
                   onScroll={handleScroll}
-                  className="snap-x snap-mandatory overflow-x-auto scroll-smooth"
+                  className="snap-x snap-mandatory overflow-x-auto scroll-smooth no-scrollbar"
+                  style={{ scrollBehavior: programmaticScroll ? "auto" : "smooth" }}
                 >
                   <div
                     className="grid snap-none grid-flow-col grid-cols-[repeat(auto-fit,minmax(320px,100%))]"
@@ -591,15 +724,7 @@ function CalendarSheet({ open, onClose }: { open: boolean; onClose: () => void }
                 <DateDisplay selectedDate={selectedDate} />
               </div>
 
-              <div className="absolute inset-x-0 bottom-0 flex h-16 items-center justify-center bg-white/90 shadow-[0_-6px_16px_rgba(0,0,0,0.08)] backdrop-blur">
-                <button
-                  onClick={onClose}
-                  className="flex items-center gap-2 rounded-full bg-[#f06488] px-4 py-2 text-sm font-semibold text-white shadow hover:shadow-md transition"
-                >
-                  <BackIcon />
-                  <span>閉じる</span>
-                </button>
-              </div>
+              <div className="h-[env(safe-area-inset-bottom)]" />
             </div>
           </div>
         </div>
@@ -628,21 +753,21 @@ function MonthGrid({
   });
 
   const legend = (
-    <div className="pointer-events-none absolute inset-0 grid grid-cols-7 grid-rows-6">
-      <div className="col-span-2 col-start-6 row-start-6 self-center justify-self-end pr-1 text-[11px] font-semibold text-[#3b2f32]">
-        <span className="mr-2 inline-flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#f06488]" />
-          ・来館予定日
+    <div className="mt-2 flex flex-wrap justify-end gap-3 pr-1 text-[11px] font-semibold text-[#3b2f32]">
+      <span className="inline-flex items-center gap-1">
+        <span className="inline-block h-2.5 w-2.5 rounded-full bg-[#f06488]" />
+        来館予定日
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="inline-block h-3 w-3 rounded-[4px] bg-[#fde9f1] ring-1 ring-[#f6cedd]" />
+        来館日
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span className="inline-block h-4 w-4 text-[#f06488]">
+          <MuscleIcon />
         </span>
-        <span className="mr-2 inline-flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 border border-[#3b2f32]" />
-          □来館日
-        </span>
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2.5 w-2.5 border-l-2 border-r-[3px] border-b-[3px] border-[#3b2f32] rotate-45" />
-          △トレーニング日
-        </span>
-      </div>
+        トレーニング日
+      </span>
     </div>
   );
 
@@ -672,6 +797,8 @@ function MonthGrid({
             const key = date ? formatDateKey(date) : "";
             const isSelected = selectedDate && key === selectedDate;
             const hasPlan = date ? plannedDates.has(key) : false;
+            const isVisited = false;
+            const isTraining = false;
 
             const weekday = date ? date.getDay() : -1;
             const weekdayColor =
@@ -684,17 +811,23 @@ function MonthGrid({
                 className={`relative aspect-square w-full p-1 text-left text-sm ${baseBg} ${day ? "hover:bg-[#fde9f1]" : ""}`}
               >
                 {isChecker && day === null ? <span className="text-xs text-transparent">.</span> : null}
-                {day ? <span className={`text-xs font-semibold ${weekdayColor}`}>{day}</span> : null}
+                {day ? <span className={`absolute left-1 top-1 text-xs font-semibold leading-none ${weekdayColor}`}>{day}</span> : null}
                 {isSelected ? <span className="pointer-events-none absolute inset-[2px] rounded-sm ring-2 ring-[#f06488]" /> : null}
+                {isVisited ? <span className="pointer-events-none absolute inset-[2px] rounded-lg bg-[#fde9f1] ring-1 ring-[#f6cedd]" /> : null}
                 {hasPlan ? (
                   <span className="pointer-events-none absolute bottom-1 left-1 h-2.5 w-2.5 rounded-full bg-[#f06488]" />
+                ) : null}
+                {isTraining ? (
+                  <span className="pointer-events-none absolute bottom-1 right-1 text-[#f06488]">
+                    <MuscleIcon />
+                  </span>
                 ) : null}
               </button>
             );
           })}
         </div>
-        {legend}
       </div>
+      {legend}
     </div>
   );
 }
@@ -818,6 +951,14 @@ function QrIcon() {
       <path d="M19 19h2v2h-2z" />
       <path d="M15 19h2" />
       <path d="M19 15h2" />
+    </svg>
+  );
+}
+
+function MuscleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M9.5 3c-.8 0-1.5.7-1.5 1.5V9h-2C4.1 9 3 10.1 3 11.5S4.1 14 5.5 14h2v5.5c0 .8.7 1.5 1.5 1.5s1.5-.7 1.5-1.5V9h4v4.5c0 .8.7 1.5 1.5 1.5S17 14.3 17 13.5V9h2c1.4 0 2.5-1.1 2.5-2.5S20.4 4 19 4h-2V4.5C17 3.7 16.3 3 15.5 3S14 3.7 14 4.5V7h-4V4.5C10 3.7 9.3 3 8.5 3Z" />
     </svg>
   );
 }
